@@ -1,34 +1,31 @@
 /**
- * Impact Consent Mode — reference implementation
- * Matches TIP "49266 - Simon Demo" + Integrate Consent Mode on impact.com
- *
- * Order of operations (critical):
- * 1. Load UTT in <head>
- * 2. On body: ire('consent','default',…) THEN ire('identify',…)
- * 3. On CMP interaction: ire('consent','update',…)
+ * Helpers + CMP update handlers.
+ * consent default + identify are inlined in <head> immediately after the UTT loader
+ * (see each HTML file) so they hit the ire stub queue before UTT JS initializes.
  */
 
 (function (window, document) {
   "use strict";
 
-  // Demo-only storage (NOT Impact platform cookies). Impact writes IR_PI only when GRANTED.
   var CONSENT_STORAGE_KEY = "demo_consent_tracking";
   var PROFILE_COOKIE = "demo_custom_profile_id";
   var CLICK_ID_COOKIE = "demo_im_ref";
   var CUSTOMER_STORAGE_KEY = "demo_customer";
-  // Referral window stand-in (days) — align with Template Terms in production
   var CLICK_ID_DAYS = 30;
   var PROFILE_DAYS = 365;
-
   var EVENT_ID_ONLINE_SALE = 70289;
 
   function log() {
     var args = Array.prototype.slice.call(arguments);
     args.unshift("[Impact Consent]");
     console.log.apply(console, args);
-    window.dispatchEvent(
-      new CustomEvent("impact:log", { detail: { message: args.slice(1).join(" ") } })
-    );
+    try {
+      window.dispatchEvent(
+        new CustomEvent("impact:log", { detail: { message: args.slice(1).join(" ") } })
+      );
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   function getCookie(name) {
@@ -39,14 +36,12 @@
   }
 
   function setCookie(name, value, days) {
-    var maxAge = days * 24 * 60 * 60;
-    // SameSite=Lax first-party cookie; HttpOnly requires a server — noted in debug panel
     document.cookie =
       name +
       "=" +
       encodeURIComponent(value) +
       "; path=/; max-age=" +
-      maxAge +
+      days * 24 * 60 * 60 +
       "; SameSite=Lax";
   }
 
@@ -64,26 +59,13 @@
     if (!id) {
       id = uuidv4();
       setCookie(PROFILE_COOKIE, id, PROFILE_DAYS);
-      log("Created customProfileId:", id);
     }
     return id;
   }
 
-  function captureClickIdFromUrl() {
-    // TIP Appendix: do not strip im_ref until after UTT loads + consent default/identify.
-    // We read and store it; we never remove it from the URL here.
-    var params = new URLSearchParams(window.location.search);
-    var imRef = params.get("im_ref");
-    if (imRef) {
-      setCookie(CLICK_ID_COOKIE, imRef, CLICK_ID_DAYS);
-      log("Captured im_ref (click id):", imRef);
-    }
-    return getCookie(CLICK_ID_COOKIE) || "";
-  }
-
   function getStoredConsent() {
     try {
-      return localStorage.getItem(CONSENT_STORAGE_KEY); // 'granted' | 'denied' | null
+      return localStorage.getItem(CONSENT_STORAGE_KEY);
     } catch (e) {
       return null;
     }
@@ -93,7 +75,7 @@
     try {
       localStorage.setItem(CONSENT_STORAGE_KEY, status);
     } catch (e) {
-      /* ignore quota / private mode */
+      /* ignore */
     }
   }
 
@@ -121,74 +103,77 @@
     );
   }
 
-  function sha1Hex(message) {
-    if (!message) return Promise.resolve("");
-    var encoder = new TextEncoder();
-    return crypto.subtle.digest("SHA-1", encoder.encode(message)).then(function (buf) {
-      return Array.from(new Uint8Array(buf))
-        .map(function (b) {
-          return b.toString(16).padStart(2, "0");
-        })
-        .join("");
-    });
+  function sha1HexSync(message) {
+    if (!message) return "";
+    function rotl(n, s) {
+      return (n << s) | (n >>> (32 - s));
+    }
+    function toHex(i) {
+      return ("00000000" + (i >>> 0).toString(16)).slice(-8);
+    }
+    var utf8 = unescape(encodeURIComponent(message));
+    var words = [];
+    var i;
+    for (i = 0; i < utf8.length; i++) {
+      words[i >> 2] |= utf8.charCodeAt(i) << (24 - (i % 4) * 8);
+    }
+    var bitLen = utf8.length * 8;
+    words[bitLen >> 5] |= 0x80 << (24 - (bitLen % 32));
+    words[(((bitLen + 64) >>> 9) << 4) + 15] = bitLen;
+    var h0 = 0x67452301;
+    var h1 = 0xefcdab89;
+    var h2 = 0x98badcfe;
+    var h3 = 0x10325476;
+    var h4 = 0xc3d2e1f0;
+    var w = new Array(80);
+    for (var block = 0; block < words.length; block += 16) {
+      var a = h0,
+        b = h1,
+        c = h2,
+        d = h3,
+        e = h4;
+      for (i = 0; i < 80; i++) {
+        w[i] =
+          i < 16
+            ? words[block + i] | 0
+            : rotl(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+        var f,
+          k;
+        if (i < 20) {
+          f = (b & c) | (~b & d);
+          k = 0x5a827999;
+        } else if (i < 40) {
+          f = b ^ c ^ d;
+          k = 0x6ed9eba1;
+        } else if (i < 60) {
+          f = (b & c) | (b & d) | (c & d);
+          k = 0x8f1bbcdc;
+        } else {
+          f = b ^ c ^ d;
+          k = 0xca62c1d6;
+        }
+        var temp = (rotl(a, 5) + f + e + k + w[i]) | 0;
+        e = d;
+        d = c;
+        c = rotl(b, 30);
+        b = a;
+        a = temp;
+      }
+      h0 = (h0 + a) | 0;
+      h1 = (h1 + b) | 0;
+      h2 = (h2 + c) | 0;
+      h3 = (h3 + d) | 0;
+      h4 = (h4 + e) | 0;
+    }
+    return toHex(h0) + toHex(h1) + toHex(h2) + toHex(h3) + toHex(h4);
   }
 
   function ensureIre() {
     if (typeof window.ire !== "function") {
-      console.error(
-        "[Impact Consent] ire() is not defined. UTT must load in <head> before this script."
-      );
+      console.error("[Impact Consent] ire() missing");
       return false;
     }
     return true;
-  }
-
-  /**
-   * Page-load consent default + identify (TIP pages 4–5).
-   * Returning users who already granted → default granted.
-   * New / undecided users → default denied.
-   */
-  var initPromise = null;
-
-  function initConsentAndIdentify() {
-    if (initPromise) return initPromise;
-
-    initPromise = (function () {
-      if (!ensureIre()) return Promise.resolve(null);
-
-      captureClickIdFromUrl();
-      var customProfileId = getCustomProfileId();
-      var stored = getStoredConsent();
-      var defaultTracking = stored === "granted" ? "granted" : "denied";
-
-      log(
-        "consent default →",
-        defaultTracking,
-        stored ? "(from prior CMP choice)" : "(new / undecided)"
-      );
-
-      // CRITICAL: consent BEFORE identify
-      window.ire("consent", "default", { tracking: defaultTracking });
-
-      var customer = getCustomer();
-      return sha1Hex(customer.email).then(function (emailHash) {
-        var identifyPayload = {
-          customerId: customer.customerId || "",
-          customerEmail: emailHash || "",
-          customProfileId: customProfileId,
-        };
-        window.ire("identify", identifyPayload);
-        log("identify →", JSON.stringify(identifyPayload));
-        window.dispatchEvent(
-          new CustomEvent("impact:consent-ready", {
-            detail: { defaultTracking: defaultTracking, stored: stored },
-          })
-        );
-        return { defaultTracking: defaultTracking, stored: stored };
-      });
-    })();
-
-    return initPromise;
   }
 
   function updateConsent(tracking) {
@@ -199,82 +184,78 @@
     setStoredConsent(tracking);
     window.ire("consent", "update", { tracking: tracking });
     log("consent update →", tracking);
-    window.dispatchEvent(
-      new CustomEvent("impact:consent-updated", { detail: { tracking: tracking } })
-    );
+    try {
+      window.dispatchEvent(
+        new CustomEvent("impact:consent-updated", { detail: { tracking: tracking } })
+      );
+    } catch (e) {
+      /* ignore */
+    }
   }
 
-  /**
-   * Confirmation page: consent default reflecting current status, then trackConversion.
-   */
   function trackOnlineSale(order) {
-    if (!ensureIre()) return Promise.resolve();
-
+    if (!ensureIre()) return null;
     var stored = getStoredConsent();
     var tracking = stored === "granted" ? "granted" : "denied";
-    var customProfileId = getCustomProfileId();
-    var clickId = getCookie(CLICK_ID_COOKIE) || "";
     var customer = getCustomer();
+    var emailHash = sha1HexSync(customer.email);
+    var clickId = getCookie(CLICK_ID_COOKIE) || "";
 
-    return sha1Hex(customer.email).then(function (emailHash) {
-      window.ire("consent", "default", { tracking: tracking });
-      log("conversion page consent default →", tracking);
+    window.ire("consent", "default", { tracking: tracking });
+    log("conversion consent default →", tracking);
 
-      var props = {
-        orderId: order.orderId,
-        customProfileId: customProfileId,
-        customerId: customer.customerId || "",
-        customerEmail: emailHash || "",
-        customerStatus: order.customerStatus || "New",
-        currencyCode: order.currencyCode || "USD",
-        orderPromoCode: order.orderPromoCode || "",
-        orderDiscount: Number(order.orderDiscount) || 0,
-        items: order.items || [],
-      };
+    var props = {
+      orderId: order.orderId,
+      customProfileId: getCustomProfileId(),
+      customerId: customer.customerId || "",
+      customerEmail: emailHash || "",
+      customerStatus: order.customerStatus || "New",
+      currencyCode: order.currencyCode || "USD",
+      orderPromoCode: order.orderPromoCode || "",
+      orderDiscount: Number(order.orderDiscount) || 0,
+      items: order.items || [],
+    };
+    if (clickId) props.clickid = clickId;
 
-      // TIP Appendix: pass click id when captured (JS variable clickid)
-      if (clickId) {
-        props.clickid = clickId;
-      }
-
-      window.ire("trackConversion", EVENT_ID_ONLINE_SALE, props, {
-        verifySiteDefinitionMatch: true,
-      });
-      log("trackConversion", EVENT_ID_ONLINE_SALE, JSON.stringify(props));
-      return props;
+    window.ire("trackConversion", EVENT_ID_ONLINE_SALE, props, {
+      verifySiteDefinitionMatch: true,
     });
-  }
-
-  function resetDemoState() {
-    clearStoredConsent();
-    // Keep profile id so returning-visitor tests stay realistic; expose full wipe separately
-    log("Cleared stored consent preference (customProfileId retained)");
+    log("trackConversion", EVENT_ID_ONLINE_SALE, JSON.stringify(props));
+    return props;
   }
 
   function getImpactIrPi() {
     return getCookie("IR_PI") || "";
   }
 
+  function listImpactCookies() {
+    return (document.cookie || "")
+      .split(";")
+      .map(function (c) {
+        return c.trim().split("=")[0];
+      })
+      .filter(function (n) {
+        return n && /^IR_/i.test(n);
+      });
+  }
+
   function wipeAllDemoState() {
     clearStoredConsent();
     setCookie(PROFILE_COOKIE, "", -1);
     setCookie(CLICK_ID_COOKIE, "", -1);
-    // Also clear legacy cookie names from earlier demo builds
-    setCookie("impact_custom_profile_id", "", -1);
-    setCookie("impact_im_ref", "", -1);
+    ["IR_PI", "IR_gbd"].forEach(function (name) {
+      document.cookie = name + "=; path=/; max-age=0; SameSite=Lax";
+    });
     try {
-      localStorage.removeItem("impact_consent_tracking");
       sessionStorage.removeItem(CUSTOMER_STORAGE_KEY);
-      sessionStorage.removeItem("impact_demo_customer");
     } catch (e) {
       /* ignore */
     }
-    log("Wiped demo consent/profile/click id/customer (IR_PI is owned by UTT)");
+    log("Wiped demo state + attempted IR_* clear");
   }
 
   window.ImpactConsent = {
     EVENT_ID_ONLINE_SALE: EVENT_ID_ONLINE_SALE,
-    initConsentAndIdentify: initConsentAndIdentify,
     updateConsent: updateConsent,
     trackOnlineSale: trackOnlineSale,
     getStoredConsent: getStoredConsent,
@@ -283,11 +264,17 @@
       return getCookie(CLICK_ID_COOKIE) || "";
     },
     getImpactIrPi: getImpactIrPi,
+    listImpactCookies: listImpactCookies,
     getCustomer: getCustomer,
     setCustomer: setCustomer,
-    sha1Hex: sha1Hex,
-    resetDemoState: resetDemoState,
+    resetDemoState: function () {
+      clearStoredConsent();
+      log("Cleared stored consent preference");
+    },
     wipeAllDemoState: wipeAllDemoState,
-    showBannerIfNeeded: null, // set by banner.js
+    showBannerIfNeeded: null,
+    openBanner: null,
+    /** True when head inline boot already queued consent+identify */
+    headBooted: !!(window.__IMPACT_CONSENT_HEAD_BOOT__),
   };
 })(window, document);

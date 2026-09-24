@@ -4,13 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Checkout — Simon Demo Shop</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="css/styles.css" />
+    <!--
+      UTT loader FIRST, then INLINE consent+identify with zero network gap.
+      This is the gold-standard sequence. Delaying these into DOMContentLoaded /
+      SPA lifecycles is the failure mode clients hit (IR cookies before Accept).
+    -->
     <script type="text/javascript">
       (function (a, b, c, d, e, f, g) {
         e["ire_o"] = c;
@@ -32,7 +30,77 @@
         window
       );
     </script>
-  </head>
+    <script type="text/javascript">
+      (function () {
+        var CONSENT_KEY = "demo_consent_tracking";
+        var PROFILE_COOKIE = "demo_custom_profile_id";
+        var CLICK_COOKIE = "demo_im_ref";
+        function getCookie(name) {
+          var m = document.cookie.match(
+            new RegExp("(?:^|; )" + name.replace(/([.$?*|{}()[\]\/+^])/g, "\$1") + "=([^;]*)")
+          );
+          return m ? decodeURIComponent(m[1]) : "";
+        }
+        function setCookie(name, value, days) {
+          document.cookie =
+            name +
+            "=" +
+            encodeURIComponent(value) +
+            "; path=/; max-age=" +
+            days * 86400 +
+            "; SameSite=Lax";
+        }
+        function uuid() {
+          return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+            var r = (Math.random() * 16) | 0;
+            return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+          });
+        }
+        var stored = null;
+        try {
+          stored = localStorage.getItem(CONSENT_KEY);
+        } catch (e) {}
+        var tracking = stored === "granted" ? "granted" : "denied";
+        var m = (location.search || "").match(/[?&]im_ref=([^&]*)/);
+        if (m) setCookie(CLICK_COOKIE, decodeURIComponent(m[1].replace(/\+/g, " ")), 30);
+        var profileId = getCookie(PROFILE_COOKIE);
+        if (!profileId) {
+          profileId = uuid();
+          setCookie(PROFILE_COOKIE, profileId, 365);
+        }
+        var customer = { customerId: "", email: "" };
+        try {
+          var raw = sessionStorage.getItem("demo_customer");
+          if (raw) customer = JSON.parse(raw);
+        } catch (e) {}
+        // SYNC into ire stub queue — before async UTT initializes
+        ire("consent", "default", { tracking: tracking });
+        ire("identify", {
+          customerId: customer.customerId || "",
+          customerEmail: "",
+          customProfileId: profileId,
+        });
+        window.__IMPACT_CONSENT_HEAD_BOOT__ = {
+          tracking: tracking,
+          stored: stored,
+          at: Date.now(),
+        };
+        console.log(
+          "[Impact Consent] HEAD boot queued consent default=" +
+            tracking +
+            " + identify (before UTT init)"
+        );
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <script src="js/impact-consent.js"></script>
+</head>
   <body>
     <header class="site-header">
       <a class="brand" href="index.html">Simon Demo Shop</a>
@@ -83,7 +151,6 @@
 
     <footer class="site-footer">Confirmation page fires trackConversion 70289</footer>
 
-    <script src="js/impact-consent.js"></script>
     <script src="js/banner.js"></script>
     <script src="js/boot.js"></script>
     <script src="js/products.js"></script>

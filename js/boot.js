@@ -1,5 +1,5 @@
 /**
- * Shared boot: init consent+identify, banner, debug panel, customer toggle.
+ * UI only: banner + inspector. Consent/identify already ran in <head>.
  */
 (function () {
   "use strict";
@@ -9,7 +9,7 @@
   }
 
   function renderDebugPanel() {
-    if ($("#impact-debug")) return;
+    if ($("#impact-debug") || !document.body) return;
     var panel = document.createElement("aside");
     panel.id = "impact-debug";
     panel.className = "debug-panel";
@@ -21,9 +21,11 @@
       '<div class="debug-panel__body">' +
       '<dl class="debug-panel__meta">' +
       "<div><dt>Hostname</dt><dd data-k=\"host\">—</dd></div>" +
+      "<div><dt>Head boot</dt><dd data-k=\"headboot\">—</dd></div>" +
       "<div><dt>UTT state (expected)</dt><dd data-k=\"state\">—</dd></div>" +
       "<div><dt>Demo consent store</dt><dd data-k=\"consent\">—</dd></div>" +
       "<div><dt>IR_PI (Impact)</dt><dd data-k=\"irpi\">—</dd></div>" +
+      "<div><dt>All IR_* cookies</dt><dd data-k=\"ircookies\">—</dd></div>" +
       "<div><dt>demo_custom_profile_id</dt><dd data-k=\"profile\">—</dd></div>" +
       "<div><dt>demo_im_ref</dt><dd data-k=\"click\">—</dd></div>" +
       "<div><dt>customerId</dt><dd data-k=\"custid\">—</dd></div>" +
@@ -32,13 +34,14 @@
       '<div class="debug-panel__actions">' +
       '<button type="button" class="btn btn--small" data-action="open-banner">Re-open banner</button>' +
       '<button type="button" class="btn btn--small" data-action="reset-consent">Reset consent</button>' +
-      '<button type="button" class="btn btn--small" data-action="wipe">Wipe all demo state</button>' +
+      '<button type="button" class="btn btn--small" data-action="wipe">Wipe all + reload</button>' +
       '<button type="button" class="btn btn--small" data-action="login">Simulate login</button>' +
       '<button type="button" class="btn btn--small" data-action="logout">Simulate logout</button>' +
       "</div>" +
-      '<p class="debug-panel__hint">Network: <code>/xcc</code> = INITIATED (waiting), <code>/bcc</code> = DENIED, ' +
-      "<code>/xur/</code> <code>/ur/</code> <code>/xconv/</code> = GRANTED. After Accept, queued identify should flush. " +
-      "<code>demo_*</code> cookies are ours; <code>IR_PI</code> is written by UTT only when granted.</p>" +
+      '<p class="debug-panel__hint"><strong>Timing:</strong> consent+identify enqueue in <code>&lt;head&gt;</code> ' +
+      "immediately after the UTT loader (before UTT JS finishes). " +
+      "Network: <code>/xcc</code> INITIATED, <code>/bcc</code> DENIED, <code>/xur/</code> GRANTED. " +
+      "Before Accept you should see <code>/xcc</code> and <em>no</em> new IR_PI.</p>" +
       '<ul class="debug-panel__log" data-log></ul>' +
       "</div>";
     document.body.appendChild(panel);
@@ -86,11 +89,18 @@
 
   function refreshMeta() {
     var panel = $("#impact-debug");
-    if (!panel) return;
+    if (!panel || !window.ImpactConsent) return;
     var c = window.ImpactConsent.getCustomer();
     var stored = window.ImpactConsent.getStoredConsent();
     var host = location.hostname;
     var siteOk = /(^|\.)simonderstine(-oss)?\.github\.io$/i.test(host);
+    var headBoot = window.__IMPACT_CONSENT_HEAD_BOOT__;
+    panel.querySelector('[data-k="headboot"]').textContent = headBoot
+      ? "queued default=" + headBoot.tracking + " @ " + headBoot.at
+      : "MISSING — consent may be too late";
+    if (!headBoot) {
+      panel.querySelector('[data-k="headboot"]').style.color = "#f0a8a0";
+    }
     var stateLabel =
       stored === "granted"
         ? "GRANTED → expect /xur/ + IR_PI"
@@ -101,7 +111,9 @@
     panel.querySelector('[data-k="consent"]').textContent =
       stored || "(none — consent default denied)";
     panel.querySelector('[data-k="irpi"]').textContent =
-      window.ImpactConsent.getImpactIrPi() || "(none — UTT sets this only when GRANTED)";
+      window.ImpactConsent.getImpactIrPi() || "(none — should stay empty until Accept)";
+    panel.querySelector('[data-k="ircookies"]').textContent =
+      (window.ImpactConsent.listImpactCookies() || []).join(", ") || "(none)";
     panel.querySelector('[data-k="profile"]').textContent =
       window.ImpactConsent.getCustomProfileId() || "—";
     panel.querySelector('[data-k="click"]').textContent =
@@ -111,22 +123,32 @@
 
     var hostEl = panel.querySelector('[data-k="host"]');
     if (hostEl) {
-      hostEl.textContent = host + (siteOk ? " ✓ matches expected Pages host" : " ✗ expect simonderstine-oss.github.io (and matching Impact site def)");
+      hostEl.textContent =
+        host +
+        (siteOk
+          ? " ✓ matches expected Pages host"
+          : " ✗ expect simonderstine-oss.github.io (and matching Impact site def)");
       hostEl.style.color = siteOk ? "#9fd9cb" : "#f0a8a0";
     }
   }
 
-  function boot() {
+  function bootUi() {
     renderDebugPanel();
-    window.ImpactConsent.initConsentAndIdentify().then(function () {
+    if (window.ImpactConsent.showBannerIfNeeded) {
       window.ImpactConsent.showBannerIfNeeded();
+    }
+    refreshMeta();
+    // Poll briefly so IR_* appearance after Accept is visible in the panel
+    var n = 0;
+    var timer = setInterval(function () {
       refreshMeta();
-    });
+      if (++n > 20) clearInterval(timer);
+    }, 500);
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
+    document.addEventListener("DOMContentLoaded", bootUi);
   } else {
-    boot();
+    bootUi();
   }
 })();
