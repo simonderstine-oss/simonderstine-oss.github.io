@@ -38,10 +38,13 @@
       '<button type="button" class="btn btn--small" data-action="login">Simulate login</button>' +
       '<button type="button" class="btn btn--small" data-action="logout">Simulate logout</button>' +
       "</div>" +
-      '<p class="debug-panel__hint"><strong>Timing:</strong> consent+identify enqueue in <code>&lt;head&gt;</code> ' +
-      "immediately after the UTT loader (before UTT JS finishes). " +
-      "Network: <code>/xcc</code> INITIATED, <code>/bcc</code> DENIED, <code>/xur/</code> GRANTED. " +
-      "Before Accept you should see <code>/xcc</code> and <em>no</em> new IR_PI.</p>" +
+      '<p class="debug-panel__hint">' +
+      "<strong>Ignore for consent checks:</strong> <code>IR_gbd</code> (domain probe) and " +
+      "<code>IR_49266</code> (campaign session cookie written when identify runs). " +
+      "<strong>Consent-gated:</strong> <code>IR_PI</code> — must be absent until Accept. " +
+      "Network: filter <code>xcc</code> / <code>bcc</code> / <code>xur</code> (not the word “consent”). " +
+      "<code>?im_ref=1234567</code> may not emit <code>/xcc</code> (invalid click id shape); status can still be INITIATED. " +
+      "Prefer a real Test Actions link, or try <code>?im_ref=!testClick001</code>.</p>" +
       '<ul class="debug-panel__log" data-log></ul>' +
       "</div>";
     document.body.appendChild(panel);
@@ -111,9 +114,18 @@
     panel.querySelector('[data-k="consent"]').textContent =
       stored || "(none — consent default denied)";
     panel.querySelector('[data-k="irpi"]').textContent =
-      window.ImpactConsent.getImpactIrPi() || "(none — should stay empty until Accept)";
-    panel.querySelector('[data-k="ircookies"]').textContent =
-      (window.ImpactConsent.listImpactCookies() || []).join(", ") || "(none)";
+      window.ImpactConsent.getImpactIrPi() || "(none — correct before Accept)";
+    var irList = window.ImpactConsent.listImpactCookies() || [];
+    panel.querySelector('[data-k="ircookies"]').textContent = irList.join(", ") || "(none)";
+    // Highlight if IR_PI leaked before grant
+    var irpi = window.ImpactConsent.getImpactIrPi();
+    if (irpi && stored !== "granted") {
+      panel.querySelector('[data-k="irpi"]').style.color = "#f0a8a0";
+      panel.querySelector('[data-k="irpi"]').textContent =
+        irpi + " ← unexpected before Accept";
+    } else if (irpi) {
+      panel.querySelector('[data-k="irpi"]').style.color = "#9fd9cb";
+    }
     panel.querySelector('[data-k="profile"]').textContent =
       window.ImpactConsent.getCustomProfileId() || "—";
     panel.querySelector('[data-k="click"]').textContent =
