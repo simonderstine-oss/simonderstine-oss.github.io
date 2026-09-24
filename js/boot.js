@@ -90,7 +90,7 @@
     var c = window.ImpactConsent.getCustomer();
     var stored = window.ImpactConsent.getStoredConsent();
     var host = location.hostname;
-    var siteOk = /(^|\.)simonderstine\.github\.io$/i.test(host);
+    var siteOk = /(^|\.)simonderstine(-oss)?\.github\.io$/i.test(host);
     var stateLabel =
       stored === "granted"
         ? "GRANTED → expect /xur/ + IR_PI"
@@ -111,7 +111,7 @@
 
     var hostEl = panel.querySelector('[data-k="host"]');
     if (hostEl) {
-      hostEl.textContent = host + (siteOk ? " ✓ matches site def" : " ✗ UTT needs simonderstine.github.io");
+      hostEl.textContent = host + (siteOk ? " ✓ matches expected Pages host" : " ✗ expect simonderstine-oss.github.io (and matching Impact site def)");
       hostEl.style.color = siteOk ? "#9fd9cb" : "#f0a8a0";
     }
   }
