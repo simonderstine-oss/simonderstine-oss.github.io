@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Checkout — Simon Demo Shop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <script type="text/javascript">
+      (function (a, b, c, d, e, f, g) {
+        e["ire_o"] = c;
+        e[c] =
+          e[c] ||
+          function () {
+            (e[c].a = e[c].a || []).push(arguments);
+          };
+        f = d.createElement(b);
+        g = d.getElementsByTagName(b)[0];
+        f.async = 1;
+        f.src = a;
+        g.parentNode.insertBefore(f, g);
+      })(
+        "https://utt.impactcdn.com/A3318275-654b-4b94-bfb3-76b3e4e02aea1.js",
+        "script",
+        "ire",
+        document,
+        window
+      );
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Simon Demo Shop</a>
+      <nav class="site-nav">
+        <a href="index.html">Shop</a>
+        <a class="cart-link" href="cart.html">
+          Cart
+          <span id="cart-count" hidden>0</span>
+        </a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="panel">
+        <h1>Checkout</h1>
+        <p class="meta">
+          Email is SHA-1 hashed before <code>identify</code> / <code>trackConversion</code>. Leave blank for
+          anonymous (empty-string) payload.
+        </p>
+        <form class="form-grid" id="checkout-form">
+          <label>
+            Customer ID
+            <input type="text" name="customerId" placeholder="e.g. cust-1001" autocomplete="username" />
+          </label>
+          <label>
+            Email (hashed client-side)
+            <input type="email" name="email" placeholder="shopper@example.com" autocomplete="email" />
+          </label>
+          <label>
+            Customer status
+            <input type="text" name="customerStatus" value="New" />
+          </label>
+          <label>
+            Promo code
+            <input type="text" name="orderPromoCode" placeholder="optional" />
+          </label>
+          <label>
+            Order discount
+            <input type="number" name="orderDiscount" value="0" min="0" step="0.01" />
+          </label>
+          <div class="actions">
+            <a class="btn btn--ghost" href="cart.html">Back to cart</a>
+            <button class="btn btn--primary" type="submit">Place order</button>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <footer class="site-footer">Confirmation page fires trackConversion 70289</footer>
+
+    <script src="js/impact-consent.js"></script>
+    <script src="js/banner.js"></script>
+    <script src="js/boot.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/cart.js"></script>
+    <script>
+      (function () {
+        var existing = ImpactConsent.getCustomer();
+        var form = document.getElementById("checkout-form");
+        form.customerId.value = existing.customerId || "";
+        form.email.value = existing.email || "";
+
+        if (!DemoCart.count()) {
+          form.querySelector('button[type="submit"]').disabled = true;
+          form.insertAdjacentHTML(
+            "beforebegin",
+            '<p class="empty">Cart is empty. <a href="index.html">Add products</a> first.</p>'
+          );
+        }
+
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var data = new FormData(form);
+          ImpactConsent.setCustomer(data.get("customerId") || "", data.get("email") || "");
+
+          var order = {
+            orderId: "ORD-" + Date.now(),
+            customerStatus: data.get("customerStatus") || "New",
+            orderPromoCode: data.get("orderPromoCode") || "",
+            orderDiscount: Number(data.get("orderDiscount")) || 0,
+            currencyCode: "USD",
+            items: DemoCart.getLineItems().map(function (i) {
+              return {
+                subTotal: i.subTotal,
+                category: i.category,
+                sku: i.sku,
+                quantity: i.quantity,
+                name: i.name,
+              };
+            }),
+          };
+
+          sessionStorage.setItem("impact_demo_pending_order", JSON.stringify(order));
+          window.location.href = "confirmation.html";
+        });
+      })();
+    </script>
+  </body>
+</html>

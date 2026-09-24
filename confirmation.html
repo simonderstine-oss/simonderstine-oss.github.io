@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirmation — Simon Demo Shop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <script type="text/javascript">
+      (function (a, b, c, d, e, f, g) {
+        e["ire_o"] = c;
+        e[c] =
+          e[c] ||
+          function () {
+            (e[c].a = e[c].a || []).push(arguments);
+          };
+        f = d.createElement(b);
+        g = d.getElementsByTagName(b)[0];
+        f.async = 1;
+        f.src = a;
+        g.parentNode.insertBefore(f, g);
+      })(
+        "https://utt.impactcdn.com/A3318275-654b-4b94-bfb3-76b3e4e02aea1.js",
+        "script",
+        "ire",
+        document,
+        window
+      );
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Simon Demo Shop</a>
+      <nav class="site-nav">
+        <a href="index.html">Shop</a>
+        <a class="cart-link" href="cart.html">
+          Cart
+          <span id="cart-count" hidden>0</span>
+        </a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="panel">
+        <span class="eyebrow">Online Sale · Event 70289</span>
+        <h1>Order confirmed</h1>
+        <p id="confirm-status">Firing consent default + trackConversion…</p>
+        <pre id="confirm-payload" class="meta" style="white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 0.8rem"></pre>
+        <div class="actions">
+          <a class="btn btn--primary" href="index.html">Back to shop</a>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      Watch network for Event Id 70289 or tracking domain simontest.sjv.io
+    </footer>
+
+    <script src="js/impact-consent.js"></script>
+    <script src="js/banner.js"></script>
+    <script src="js/boot.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/cart.js"></script>
+    <script>
+      (function () {
+        var statusEl = document.getElementById("confirm-status");
+        var payloadEl = document.getElementById("confirm-payload");
+        var raw = sessionStorage.getItem("impact_demo_pending_order");
+
+        // Await shared init (consent default + identify), then trackConversion.
+        ImpactConsent.initConsentAndIdentify().then(function () {
+          if (!raw) {
+            statusEl.textContent = "No pending order. Complete checkout first.";
+            return;
+          }
+
+          var order = JSON.parse(raw);
+          return ImpactConsent.trackOnlineSale(order).then(function (props) {
+            statusEl.innerHTML =
+              "Conversion sent for <strong>" +
+              order.orderId +
+              "</strong> with consent default = stored preference (granted or denied).";
+            payloadEl.textContent = JSON.stringify(props, null, 2);
+            sessionStorage.removeItem("impact_demo_pending_order");
+            DemoCart.clearCart();
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

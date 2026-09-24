@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cart — Simon Demo Shop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <script type="text/javascript">
+      (function (a, b, c, d, e, f, g) {
+        e["ire_o"] = c;
+        e[c] =
+          e[c] ||
+          function () {
+            (e[c].a = e[c].a || []).push(arguments);
+          };
+        f = d.createElement(b);
+        g = d.getElementsByTagName(b)[0];
+        f.async = 1;
+        f.src = a;
+        g.parentNode.insertBefore(f, g);
+      })(
+        "https://utt.impactcdn.com/A3318275-654b-4b94-bfb3-76b3e4e02aea1.js",
+        "script",
+        "ire",
+        document,
+        window
+      );
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Simon Demo Shop</a>
+      <nav class="site-nav">
+        <a href="index.html">Shop</a>
+        <a class="cart-link" href="cart.html">
+          Cart
+          <span id="cart-count" hidden>0</span>
+        </a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="panel">
+        <h1>Cart</h1>
+        <div id="cart-empty" class="empty" hidden>Your cart is empty. <a href="index.html">Continue shopping</a>.</div>
+        <table class="cart-table" id="cart-table" hidden>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Qty</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody id="cart-body"></tbody>
+        </table>
+        <p id="cart-total" hidden></p>
+        <div class="actions" id="cart-actions" hidden>
+          <a class="btn btn--ghost" href="index.html">Keep shopping</a>
+          <a class="btn btn--primary" href="checkout.html">Checkout</a>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">UTT + consent default + identify on every page</footer>
+
+    <script src="js/impact-consent.js"></script>
+    <script src="js/banner.js"></script>
+    <script src="js/boot.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/cart.js"></script>
+    <script>
+      function renderCart() {
+        var items = DemoCart.getLineItems();
+        var empty = document.getElementById("cart-empty");
+        var table = document.getElementById("cart-table");
+        var body = document.getElementById("cart-body");
+        var total = document.getElementById("cart-total");
+        var actions = document.getElementById("cart-actions");
+
+        if (!items.length) {
+          empty.hidden = false;
+          table.hidden = true;
+          total.hidden = true;
+          actions.hidden = true;
+          return;
+        }
+
+        empty.hidden = true;
+        table.hidden = false;
+        total.hidden = false;
+        actions.hidden = false;
+        body.innerHTML = items
+          .map(function (item) {
+            return (
+              "<tr>" +
+              "<td><strong>" +
+              item.name +
+              "</strong><div class=\"meta\">" +
+              item.sku +
+              " · " +
+              item.category +
+              "</div></td>" +
+              '<td><div class="qty-controls">' +
+              '<button type="button" data-qty="' +
+              item.sku +
+              '" data-delta="-1">−</button>' +
+              "<span>" +
+              item.quantity +
+              "</span>" +
+              '<button type="button" data-qty="' +
+              item.sku +
+              '" data-delta="1">+</button>' +
+              "</div></td>" +
+              "<td>" +
+              DemoCart.formatMoney(item.subTotal) +
+              "</td>" +
+              "</tr>"
+            );
+          })
+          .join("");
+        total.innerHTML = "<strong>Subtotal:</strong> " + DemoCart.formatMoney(DemoCart.getSubtotal());
+      }
+
+      document.getElementById("cart-body").addEventListener("click", function (e) {
+        var btn = e.target.closest("[data-qty]");
+        if (!btn) return;
+        var sku = btn.getAttribute("data-qty");
+        var delta = Number(btn.getAttribute("data-delta"));
+        var line = DemoCart.getLineItems().find(function (i) {
+          return i.sku === sku;
+        });
+        if (!line) return;
+        DemoCart.setQty(sku, line.quantity + delta);
+        renderCart();
+      });
+
+      renderCart();
+    </script>
+  </body>
+</html>
